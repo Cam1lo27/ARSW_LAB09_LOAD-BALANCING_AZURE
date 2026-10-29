@@ -26,7 +26,20 @@
 
 ### Creación de la VM
 
-![VM creada](evidencias/part1/p1-01-vm-config.png)
+> **Nota sobre el tamaño de la VM:** con la suscripción *Azure for Students* los tamaños de 1 vCPU
+> (B1ls, B1s, A1_v2, B1ms) aparecen como **"Tamaño no disponible"** en todas las regiones probadas
+> (Brazil South, East US 2, ...). Por eso la VM se creó con **Standard_D2s_v3** (2 vCPU, 8 GiB) en
+> **East US 2**, y el escalamiento vertical se hizo hacia el siguiente tamaño de la misma familia,
+> **Standard_D4s_v3** (4 vCPU, 16 GiB), en lugar de B1ls → B2ms. El objetivo del experimento —comparar
+> la misma VM antes y después de aumentar su tamaño— se mantiene.
+
+![B1ls no disponible en Brazil South](evidencias/part1/p1-00-b1ls-no-disponible-brazil.png)
+![Tamaños de 1 vCPU no disponibles](evidencias/part1/p1-00-b1ls-no-disponible.png)
+
+![Configuración de la VM](evidencias/part1/p1-01-vm-config.png)
+![Configuración de la VM (detalle)](evidencias/part1/p1-01-vm-config-2.png)
+
+![VM creada](evidencias/part1/p1-01-vm-creada.png)
 
 ![Recursos del grupo](evidencias/part1/p1-02-recursos-grupo.png)
 
@@ -36,29 +49,42 @@
 
 ![npm install](evidencias/part1/p1-05-npm-install.png)
 
-![App cae al cerrar SSH](evidencias/part1/p1-06-app-cae-sin-forever.png)
+App ejecutada con `node FibonacciApp.js` mientras la sesión SSH está abierta:
+
+![App con SSH abierto](evidencias/part1/p1-06a-app-con-ssh.png)
+
+Después de cerrar la sesión SSH, la misma URL responde `ERR_CONNECTION_REFUSED`:
+
+![App cae al cerrar SSH](evidencias/part1/p1-06b-app-cae-sin-ssh.png)
+
+![Reglas antes de abrir el 3000](evidencias/part1/p1-07-reglas-antes.png)
 
 ![Inbound rule 3000](evidencias/part1/p1-07-inbound-rule-3000.png)
 
-![fibonacci/6](evidencias/part1/p1-08-fibonacci-6.png)
+App ejecutada con `forever` (un solo proceso):
+
+![forever list](evidencias/part1/p1-08a-forever-list.png)
+
+Tras cerrar la sesión SSH la app sigue respondiendo:
+
+![fibonacci/6 sin SSH](evidencias/part1/p1-08b-app-sin-ssh.png)
 
 ### Preguntas
 
 **1. ¿Cuántos y cuáles recursos crea Azure junto con la VM?**
 
-Además de la máquina virtual, Azure crea en el grupo `SCALABILITY_LAB` (ver `p1-02-recursos-grupo.png`):
+En el grupo `SCALABILITY_LAB` quedaron **6 recursos** (la VM y otros **5 recursos** que Azure crea junto con ella), todos en East US 2 (ver `p1-02-recursos-grupo.png`):
 
-| # | Recurso | Ejemplo de nombre |
+| # | Recurso (tipo) | Nombre |
 |---|---|---|
-| 1 | Virtual machine | `VERTICAL-SCALABILITY` |
-| 2 | Disk (disco del SO) | `VERTICAL-SCALABILITY_OsDisk_1_...` |
-| 3 | Network interface (NIC) | `vertical-scalability123` |
-| 4 | Public IP address | `VERTICAL-SCALABILITY-ip` |
-| 5 | Network security group (NSG) | `VERTICAL-SCALABILITY-nsg` |
-| 6 | Virtual network (con su subnet `default`) | `VERTICAL-SCALABILITY-vnet` |
-| 7 | SSH key (solo si Azure generó la llave) | `VERTICAL-SCALABILITY_key` |
+| 1 | Máquina virtual | `VERTICAL-SCALABILITY` |
+| 2 | Dirección IP pública | `VERTICAL-SCALABILITY-ip` (20.242.45.21) |
+| 3 | Grupo de seguridad de red (NSG) | `VERTICAL-SCALABILITY-nsg` |
+| 4 | Interfaz de red (NIC) | `vertical-scalability99` |
+| 5 | Disco (disco del SO) | `VERTICAL-SCALABILITY_OsDisk_...` |
+| 6 | Red virtual (con su subred `snet-eastus2-1`) | `vnet-eastus2-1` |
 
-TODO: ajustar la tabla a lo que muestre su pantallazo (normalmente son 6 recursos + la VM, o 7 si Azure generó la llave SSH).
+No aparece un recurso de llave SSH porque se usó una llave pública existente en lugar de generarla en Azure.
 
 **2. ¿Para qué sirve cada recurso?**
 
@@ -77,22 +103,26 @@ TODO: ajustar la tabla a lo que muestre su pantallazo (normalmente son 6 recurso
 
 **4. Tabla de tiempos e interpretación**
 
-![Tiempos B1ls](evidencias/part1/p1-09-tiempos-b1ls.png)
-![Tiempos B2ms](evidencias/part1/p1-13-tiempos-b2ms.png)
+Tiempos medidos desde la consola del navegador con [scripts/medir-tiempos.js](scripts/medir-tiempos.js) (peticiones secuenciales):
 
-| n | B1ls (s) | B2ms (s) |
+![Tiempos D2s_v3](evidencias/part1/p1-09-tiempos-d2sv3.png)
+![Tiempos D4s_v3](evidencias/part1/p1-13-tiempos-d4sv3.png)
+
+| n | D2s_v3 (s) | D4s_v3 (s) |
 |---|---|---|
-| 1 000 000 | TODO | TODO |
-| 1 010 000 | TODO | TODO |
-| 1 020 000 | TODO | TODO |
-| 1 030 000 | TODO | TODO |
-| 1 040 000 | TODO | TODO |
-| 1 050 000 | TODO | TODO |
-| 1 060 000 | TODO | TODO |
-| 1 070 000 | TODO | TODO |
-| 1 080 000 | TODO | TODO |
-| 1 090 000 | TODO | TODO |
-| **Promedio** | TODO | TODO |
+| 1 000 000 | 11.05 | 10.77 |
+| 1 010 000 | 11.26 | 11.14 |
+| 1 020 000 | 11.49 | 10.84 |
+| 1 030 000 | 11.67 | 11.23 |
+| 1 040 000 | 11.99 | 11.35 |
+| 1 050 000 | 12.25 | 11.48 |
+| 1 060 000 | 12.28 | 11.71 |
+| 1 070 000 | 12.63 | 11.97 |
+| 1 080 000 | 12.71 | 12.81 |
+| 1 090 000 | 12.78 | 12.86 |
+| **Promedio** | **12.01** | **11.62** |
+
+Todas las peticiones respondieron `200`, pero cada una tarda **más de 11 segundos**. Además, el tiempo crece más rápido que `n`: al pasar de 1 000 000 a 1 090 000 (+9 % en `n`) el tiempo sube de 11.05 s a 12.78 s (+15.7 %), lo que es consistente con un costo superlineal (≈ O(n²)).
 
 La función tarda tanto porque:
 - Recorre la secuencia completa (n − 1 iteraciones) en cada petición: **no hay memoización ni caché**, aunque el valor ya se haya calculado antes.
@@ -103,21 +133,52 @@ La función tarda tanto porque:
 
 **5. Consumo de CPU e interpretación**
 
-![CPU B1ls](evidencias/part1/p1-10-cpu-b1ls.png)
+![CPU D2s_v3](evidencias/part1/p1-10-cpu-d2sv3.png)
 
-TODO: anotar el pico de CPU observado (≈ __ %).
+Métrica *Percentage CPU (Max)* de la última hora. Durante la prueba de tiempos (≈ 5:09–5:12 p. m.) la CPU llegó a un máximo de **46.19 %**. Los picos anteriores (≈ 37 % a las 4:30 y ≈ 35 % a las 4:43) corresponden a la instalación de Node y a `npm install`.
 
-El cálculo es **CPU-bound**: es un ciclo sin I/O que mantiene ocupado el núcleo hasta terminar. La B1ls tiene **1 vCPU**, por lo que mientras haya una petición en curso la CPU se acerca al 100 %. Además, la serie B es *burstable*: la VM acumula créditos cuando está por debajo de su línea base y los gasta al superar esa línea; si se agotan, Azure limita la CPU a la línea base y los tiempos crecen aún más.
+El cálculo es **CPU-bound**: es un ciclo sin I/O que mantiene ocupado el núcleo hasta terminar. Como Node.js ejecuta el JavaScript en **un solo hilo**, el cálculo ocupa al 100 % **uno** de los **2 vCPU** de la D2s_v3, y Azure muestra el promedio de toda la VM: ≈ 50 % (el 46 % medido). Es decir, la VM no está "a media carga": el núcleo que usa la app está saturado y el otro queda prácticamente sin uso. Por eso agregar más vCPU no acelera una petición individual.
 
 **6. Resumen de la ejecución de Postman (newman)**
 
-![Newman B1ls 1](evidencias/part1/p1-11-newman-b1ls-1.png)
-![Newman B1ls 2](evidencias/part1/p1-11-newman-b1ls-2.png)
+Dos ejecuciones de newman en paralelo (10 iteraciones cada una, `nth = 1000000`) contra la VM D2s_v3, lanzadas con [scripts/run-newman.ps1](scripts/run-newman.ps1):
 
-TODO: pegar la tabla que imprime `node scripts/resumen-newman.js evidencias/part1/newman/b1ls`.
+Ejecución 1:
 
-- **Tiempos de ejecución:** TODO (promedio, mínimo, máximo). Con 2 ejecuciones paralelas cada petición tarda aproximadamente el doble que en la prueba secuencial, porque Node atiende una petición a la vez y la otra queda en cola.
-- **Fallos:** TODO. Si aparecen errores `ECONNRESET`, `ETIMEDOUT` o `socket hang up`, se deben a que la VM (1 vCPU, 0.5 GiB de RAM) se satura: la cola de peticiones crece, el proceso puede quedarse sin memoria (cada respuesta ocupa ~200 KB y los `bigInt` intermedios mucho más) y el sistema operativo o `forever` reinicia el proceso, cortando las conexiones abiertas.
+![Newman D2s_v3 ejecución 1](evidencias/part1/p1-11-newman-d2sv3-1a.png)
+![Newman D2s_v3 ejecución 1 – fallos](evidencias/part1/p1-11-newman-d2sv3-1b.png)
+
+Ejecución 2:
+
+![Newman D2s_v3 ejecución 2](evidencias/part1/p1-11-newman-d2sv3-2a.png)
+![Newman D2s_v3 ejecución 2 – fallos](evidencias/part1/p1-11-newman-d2sv3-2b.png)
+
+Resumen (`node scripts/resumen-newman.js evidencias/part1/newman/d2sv3`, tiempos solo de las peticiones exitosas):
+
+| Ejecución | Peticiones | Exitosas | Fallidas | Prom. (s) | Mín. (s) | Máx. (s) | Duración total (s) |
+|---|---|---|---|---|---|---|---|
+| newman-1 | 10 | 5 | 5 | 13.14 | 10.84 | 21.73 | 119.7 |
+| newman-2 | 10 | 6 | 4 | 12.77 | 10.85 | 21.70 | 119.9 |
+| **Total** | **20** | **11 (55 %)** | **9 (45 %)** | **12.94** | | | |
+
+Resultado de cada iteración (s = tiempo de respuesta, ERR = `ECONNRESET`):
+
+| Iteración | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| newman-1 | 21.7 | ERR | 11.1 | ERR | 11.0 | ERR | 11.1 | ERR | 10.8 | ERR |
+| newman-2 | 21.7 | 10.9 | ERR | 11.1 | ERR | 11.0 | ERR | 11.0 | ERR | 10.9 |
+
+- **Tiempos de ejecución:** las peticiones exitosas tardaron entre **10.8 s y 21.7 s** (promedio 12.9 s; newman reporta 15.3 s y 13.6 s porque incluye también el tiempo de las fallidas). La primera petición de cada ejecución tardó **21.7 s**, casi el doble de lo normal: llegaron las dos al mismo tiempo y, como Node atiende **una sola petición a la vez** en su único hilo, una tuvo que esperar a que terminara el cálculo de la otra (≈ 10.8 s + 10.8 s). Cada ejecución duró ~2 minutos.
+- **Fallos:** **9 de 20 peticiones (45 %) fallaron** con `read ECONNRESET`, es decir, el servidor cerró la conexión TCP. Los fallos **se alternan** entre las dos ejecuciones (cuando una responde, la otra falla), lo que muestra que no es un fallo aleatorio sino un efecto de la concurrencia:
+  1. newman reutiliza la misma conexión TCP (*keep-alive*) para todas sus peticiones, y Node cierra una conexión *keep-alive* que lleva más de 5 s inactiva.
+  2. Mientras la VM calcula la petición de la ejecución A (~11 s), el *event loop* de Node está bloqueado y no puede atender la nueva petición que la ejecución B ya envió por su conexión.
+  3. Cuando el cálculo termina, Node procesa sus temporizadores atrasados, ve que la conexión de B lleva más de 5 s "inactiva" y la cierra, descartando la petición que estaba esperando → B recibe `ECONNRESET`.
+  
+  ![CPU durante newman](evidencias/part1/p1-11-cpu-newman-d2sv3.png)
+
+  Durante la prueba con newman (≈ 5:31–5:35 p. m.) la CPU se mantuvo en un máximo de **48.66 %**, es decir, un núcleo saturado y el otro libre.
+
+  La causa no es falta de recursos de la VM (la CPU total estaba en ~50 %), sino que el cálculo bloquea el único hilo de Node. Por eso el sistema **no cumple** el escenario de calidad: no todas las peticiones concurrentes son respondidas.
 
 **7. Diferencia entre B2ms y B1ls**
 
@@ -130,7 +191,22 @@ TODO: pegar la tabla que imprime `node scripts/resumen-newman.js evidencias/part
 | Discos de datos / IOPS / red | límites muy bajos | límites mayores |
 | Costo aprox. (Linux, pago por uso) | ~US$ 4 / mes | ~US$ 60 / mes |
 
-Más allá del hardware: la B1ls está pensada para cargas casi inactivas (pruebas, servidores pequeños) y solo puede usar ráfagas cortas de CPU; la B2ms soporta cargas sostenidas mucho más altas antes de agotar créditos y tiene más memoria para manejar varias peticiones simultáneas, pero cuesta ~15 veces más. TODO: verificar los precios en la [calculadora de Azure](https://azure.microsoft.com/es-es/pricing/calculator/) para la región usada.
+Más allá del hardware: la B1ls está pensada para cargas casi inactivas (pruebas, servidores pequeños) y solo puede usar ráfagas cortas de CPU; la B2ms soporta cargas sostenidas mucho más altas antes de agotar créditos y tiene más memoria para manejar varias peticiones simultáneas, pero cuesta ~15 veces más.
+
+**Tamaños usados realmente en este laboratorio** (B1ls no estaba disponible, ver nota al inicio):
+
+| | Standard_D2s_v3 (inicial) | Standard_D4s_v3 (escalada) |
+|---|---|---|
+| vCPU | 2 | 4 |
+| RAM | 8 GiB | 16 GiB |
+| Tipo de CPU | Rendimiento fijo (no *burstable*: puede usar el 100 % de sus núcleos todo el tiempo, sin créditos) | Igual |
+| Discos de datos máx. | 4 | 8 |
+| IOPS máx. | 3 200 | 6 400 |
+| Almacenamiento temporal | 16 GiB | 32 GiB |
+| Ancho de banda de red aprox. | 1 000 Mbps | 2 000 Mbps |
+| Costo (East US 2, Linux, pago por uso) | ≈ USD 0.096/h (≈ USD 70/mes) | ≈ USD 0.192/h (**USD 140.16/mes**, según el portal) |
+
+Al pasar a D4s_v3 **todo se duplica, incluido el precio**. La diferencia con la pareja B1ls/B2ms es que la serie D no usa créditos de CPU, por lo que el rendimiento de la máquina pequeña no se degrada con el tiempo; lo único que gana la grande es más núcleos, más memoria y más capacidad de disco y red.
 
 **8. ¿Aumentar el tamaño de la VM es una buena solución? ¿Qué pasa con la FibonacciApp al cambiar el tamaño?**
 
@@ -140,6 +216,16 @@ No es una buena solución en este escenario:
 - Sigue siendo un **único punto de falla**.
 
 Al cambiar el tamaño, Azure **detiene y reinicia la VM** (incluso puede moverla a otro host físico). La FibonacciApp **se detiene** y, como `forever` no está configurado para arrancar con el sistema, queda caída hasta que se vuelva a ejecutar `forever start FibonacciApp.js`.
+
+Evidencia: cambio de tamaño de **Standard_D2s_v3 → Standard_D4s_v3** (4 vCPU, 16 GiB, ≈ USD 140/mes frente a ≈ USD 70/mes) y, justo después, la app deja de responder (`ERR_CONNECTION_REFUSED`) porque la VM se reinició:
+
+![Resize a D4s_v3](evidencias/part1/p1-12a-resize-d4sv3.png)
+![VM con el nuevo tamaño](evidencias/part1/p1-12b-vm-d4sv3.png)
+![App caída tras el resize](evidencias/part1/p1-12c-app-cae-tras-resize.png)
+
+Hubo que entrar de nuevo por SSH y ejecutar `forever start FibonacciApp.js`; `nproc` confirma los 4 núcleos:
+
+![App levantada de nuevo en D4s_v3](evidencias/part1/p1-12d-forever-d4sv3.png)
 
 **9. ¿Qué pasa con la infraestructura al cambiar el tamaño? Efectos negativos**
 
@@ -151,26 +237,88 @@ Al cambiar el tamaño, Azure **detiene y reinicia la VM** (incluso puede moverla
 
 **10. ¿Hubo mejora en el consumo de CPU o en los tiempos de respuesta?**
 
-![CPU B2ms](evidencias/part1/p1-14-cpu-b2ms.png)
-![Newman B2ms 1](evidencias/part1/p1-15-newman-b2ms-1.png)
-![Newman B2ms 2](evidencias/part1/p1-15-newman-b2ms-2.png)
+CPU con D4s_v3 (en la misma gráfica se ven, a la izquierda, los picos de ~46–49 % de las pruebas con D2s_v3):
 
-TODO: Sí/No según sus datos. Interpretación esperada: el **porcentaje de CPU baja** (≈ 50 %) porque el mismo hilo ocupado ahora se promedia sobre 2 vCPU, y desaparece el *throttling* por créditos. Los **tiempos por petición mejoran poco** porque el algoritmo sigue ejecutándose en un solo hilo; la mejora principal es la estabilidad (más RAM → menos fallos).
+![CPU D4s_v3](evidencias/part1/p1-14-cpu-d4sv3.png)
+
+newman (2 en paralelo) con D4s_v3:
+
+![Newman D4s_v3 ejecución 1](evidencias/part1/p1-15-newman-d4sv3-1a.png)
+![Newman D4s_v3 ejecución 1 – fallos](evidencias/part1/p1-15-newman-d4sv3-1b.png)
+![Newman D4s_v3 ejecución 2](evidencias/part1/p1-15-newman-d4sv3-2a.png)
+![Newman D4s_v3 ejecución 2 – fallos](evidencias/part1/p1-15-newman-d4sv3-2b.png)
+
+| Ejecución | Peticiones | Exitosas | Fallidas | Prom. (s) | Mín. (s) | Máx. (s) | Duración total (s) |
+|---|---|---|---|---|---|---|---|
+| newman-1 | 10 | 6 | 4 | 12.31 | 10.40 | 20.84 | 115.5 |
+| newman-2 | 10 | 5 | 5 | 12.65 | 10.48 | 20.80 | 115.3 |
+| **Total** | **20** | **11 (55 %)** | **9 (45 %)** | **12.46** | | | |
+
+Comparación:
+
+| Métrica | D2s_v3 | D4s_v3 | Cambio |
+|---|---|---|---|
+| Tiempo promedio secuencial (10 valores) | 12.01 s | 11.62 s | −3.2 % |
+| CPU máxima (*Percentage CPU*, Max) | 46.19 % | 22.44 % | −51 % |
+| newman: peticiones exitosas | 11 / 20 | 11 / 20 | igual |
+| newman: tiempo promedio de las exitosas | 12.94 s | 12.46 s | −3.7 % |
+| newman: duración de cada ejecución | ~120 s | ~115 s | −4 % |
+| Costo | ≈ USD 70/mes | ≈ USD 140/mes | +100 % |
+
+**No hubo una mejora real.**
+- El **porcentaje de CPU bajó a la mitad**, pero solo en apariencia: sigue habiendo **un núcleo al 100 %** (el del hilo de Node) y ahora el promedio se divide entre 4 núcleos en vez de 2 (≈ 25 %). Los otros 3 núcleos quedan sin usar.
+- Los **tiempos de respuesta mejoraron solo un ~3–4 %** (variación normal entre ejecuciones o un procesador ligeramente distinto tras el reinicio), porque cada cálculo sigue corriendo en un solo hilo y a la misma velocidad de reloj.
+- La **tasa de éxito con newman no cambió** (55 %) y los `ECONNRESET` siguen apareciendo con el mismo patrón alternado: el cuello de botella es el *event loop* bloqueado, no la cantidad de núcleos o de memoria.
+- A cambio, el **costo se duplicó**.
 
 **11. Cuatro ejecuciones paralelas de newman. ¿El comportamiento es porcentualmente mejor?**
 
-![Newman B2ms 4 paralelo](evidencias/part1/p1-16-newman-b2ms-4paralelo.png)
-![CPU B2ms 4 paralelo](evidencias/part1/p1-16-cpu-b2ms-4paralelo.png)
+Cuatro ejecuciones de newman en paralelo contra la VM D4s_v3 (pantallazo de una de ellas):
 
-TODO: pegar tabla de `node scripts/resumen-newman.js evidencias/part1/newman/b2ms-4`.
+![Newman 4 en paralelo](evidencias/part1/p1-16-newman-d4sv3-4paralelo-a.png)
+![Newman 4 en paralelo – fallos](evidencias/part1/p1-16-newman-d4sv3-4paralelo-b.png)
 
-Interpretación esperada: **no**. Al duplicar la concurrencia, las peticiones se encolan en el único hilo de Node, por lo que los tiempos de respuesta aproximadamente se duplican y la tasa de éxito no mejora (o empeora). Escalar verticalmente no aumenta la capacidad de procesamiento concurrente de esta aplicación.
+| Ejecución | Peticiones | Exitosas | Fallidas | Prom. (s) | Mín. (s) | Máx. (s) | Duración total (s) |
+|---|---|---|---|---|---|---|---|
+| newman-1 | 10 | 5 | 5 | 27.59 | 20.41 | 29.61 | 186.5 |
+| newman-2 | 10 | 5 | 5 | 29.59 | 29.42 | 30.13 | 196.2 |
+| newman-3 | 10 | 5 | 5 | 31.56 | 29.43 | 39.78 | 206.1 |
+| newman-4 | 10 | 6 | 4 | 27.89 | 9.87 | 49.49 | 206.3 |
+| **Total** | **40** | **21 (52.5 %)** | **19 (47.5 %)** | **29.10** | | | |
+
+La primera petición de cada ejecución tardó **20.4 s, 30.1 s, 39.8 s y 49.5 s**: llegaron las 4 a la vez y Node las resolvió **una detrás de otra**, ~10 s cada una.
+
+![CPU 4 en paralelo](evidencias/part1/p1-16-cpu-d4sv3-4paralelo.png)
+
+La CPU máxima fue **23.36 %**, igual que con 2 ejecuciones: sigue habiendo un solo núcleo ocupado de los 4.
+
+| Métrica (D4s_v3) | 2 en paralelo | 4 en paralelo |
+|---|---|---|
+| Peticiones enviadas | 20 | 40 |
+| Exitosas | 11 (55 %) | 21 (52.5 %) |
+| Tiempo promedio de las exitosas | 12.46 s | **29.10 s** (×2.3) |
+| Duración de la prueba | ~115 s | ~206 s |
+| Peticiones exitosas por minuto | ≈ 5.7 | ≈ 6.1 |
+| CPU máxima | 22.44 % | 23.36 % |
+
+**No, el comportamiento no es porcentualmente mejor.** Al duplicar la concurrencia el porcentaje de éxito se mantiene o baja un poco (55 % → 52.5 %), los tiempos de respuesta se multiplican por ~2.3 y el *throughput* real queda igual (~6 respuestas por minuto, es decir, una cada ~10 s). La VM tiene 4 núcleos pero la app solo usa uno, así que su capacidad no depende del tamaño de la máquina: cada petición extra simplemente espera en la cola del único hilo. Escalar verticalmente no aumenta la capacidad de procesamiento concurrente de esta aplicación.
 
 ### Evaluación del escenario de calidad (paso 12)
 
-TODO: con sus datos. Conclusión esperada: **no se cumple**. La CPU supera el 70 % durante las pruebas (y con B1ls llega a ~100 %) y/o hay peticiones fallidas o con tiempos muy altos. El escalamiento vertical no resuelve el problema porque la aplicación no aprovecha más núcleos y sigue existiendo un único nodo.
+> *Cuando un conjunto de usuarios consulta un enésimo número (superior a 1 000 000) de la secuencia de Fibonacci de forma concurrente (…), todas las peticiones deben ser respondidas y el consumo de CPU del sistema no puede superar el 70 %.*
 
-![VM devuelta a B1ls](evidencias/part1/p1-17-resize-back-b1ls.png)
+| Condición | D2s_v3 | D4s_v3 | ¿Cumple? |
+|---|---|---|---|
+| Todas las peticiones concurrentes respondidas | 55 % (11/20) | 55 % (11/20); 52.5 % con 4 en paralelo | **No** |
+| CPU ≤ 70 % | 46–49 % | 22–23 % | Sí (en apariencia) |
+
+**El escenario no se cumple con escalamiento vertical.** Aunque el porcentaje de CPU de la VM queda por debajo del 70 %, casi la mitad de las peticiones concurrentes falla (`ECONNRESET`) y las que responden tardan entre 10 s y 50 s. Además, el bajo porcentaje de CPU es engañoso: el núcleo que usa la aplicación está al 100 %, y los demás no aportan nada. Aumentar el tamaño de la VM duplicó el costo sin mejorar la tasa de éxito ni los tiempos, porque el cuello de botella es el único hilo de Node.js en un único nodo. Para cumplirlo se necesita repartir las peticiones entre varios procesos o máquinas (escalamiento horizontal, Parte 2) y/o mejorar el algoritmo.
+
+### Regreso al tamaño inicial (paso 13)
+
+La VM se devolvió a **Standard_D2s_v3** para reducir el costo:
+
+![VM devuelta a D2s_v3](evidencias/part1/p1-17-resize-back-d2sv3.png)
 
 ---
 

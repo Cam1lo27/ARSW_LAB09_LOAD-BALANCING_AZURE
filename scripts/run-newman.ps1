@@ -35,7 +35,7 @@ for ($i = 1; $i -le $Parallel; $i++) {
     $report = Join-Path $outDir "newman-$i.json"
     $cmd = @"
 `$Host.UI.RawUI.WindowTitle = 'newman $i/$Parallel - $Label'
-newman run '$collection' -e '$environment' --env-var '$variable=$Target' -n $Iterations -r cli,json --reporter-json-export '$report'
+newman run '$collection' -e '$environment' --env-var '$variable=$Target' -n $Iterations -r 'cli,json' --reporter-json-export '$report'
 Read-Host 'Ejecucion $i terminada. Tome el pantallazo y presione Enter para cerrar'
 "@
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))

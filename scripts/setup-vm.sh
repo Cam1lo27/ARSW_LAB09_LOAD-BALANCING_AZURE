@@ -7,9 +7,9 @@ set -e
 REPO_URL="${1:-https://github.com/Cam1lo27/ARSW_LAB09_LOAD-BALANCING_AZURE.git}"
 REPO_DIR="$HOME/$(basename "$REPO_URL" .git)"
 
-echo ">> Instalando git y curl"
+echo ">> Instalando git, curl y libatomic1 (requerida por las versiones recientes de Node)"
 sudo apt-get update -y
-sudo apt-get install -y git curl
+sudo apt-get install -y git curl libatomic1
 
 echo ">> Instalando nvm y Node.js LTS"
 if [ ! -d "$HOME/.nvm" ]; then
