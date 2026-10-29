@@ -1,1 +1,3 @@
 FibonacciApp/node_modules
+# Reportes JSON de newman (pesan varios MB); la evidencia va en pantallazos + INFORME.md
+evidencias/**/newman/
