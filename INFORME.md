@@ -5,7 +5,6 @@
 
 > Las imágenes de este informe se leen de la carpeta `evidencias/`. Guarde cada pantallazo con el
 > nombre exacto que aparece en el enlace para que se vea automáticamente en GitHub.
-> Los textos marcados con `TODO` se completan con los datos que obtenga en sus pruebas.
 
 ---
 
@@ -328,10 +327,11 @@ La VM se devolvió a **Standard_D2s_v3** para reducir el costo:
 
 > **Nota sobre tamaños y cantidad de VMs:** la suscripción *Azure for Students* tiene un límite de
 > **6 vCPU regionales** en East US 2 (no ajustable: la solicitud para subirlo a 8 fue rechazada) y la
-> familia DSv3 solo permite 4 vCPU. Los tamaños de 1 vCPU no están disponibles, así que las VMs de esta
-> parte son **Standard_B2ats_v2** (2 vCPU, 1 GiB, familia Basv2) y solo caben **3 VMs** (6 vCPU).
-> Por eso el punto 3 (agregar una 4.ª VM) no se pudo hacer; la prueba con 4 newman en paralelo se
-> ejecutó contra las 3 VMs.
+> familia DSv3 solo permite 4 vCPU. Los tamaños de 1 vCPU no están disponibles (y la B2ats_v2 de la
+> familia Basv2 tampoco), así que las VMs de esta parte son de 2 vCPU: **VM1 y VM2 Standard_D2s_v3**
+> (agotan las 4 vCPU de DSv3) y **VM3 Standard_E2s_v3** (familia ESv3, con su propia cuota). Solo caben
+> **3 VMs** (6 vCPU), por eso el punto 3 (agregar una 4.ª VM) no se pudo hacer; la prueba con 4 newman
+> en paralelo se ejecutó contra las 3 VMs.
 
 ![Cuota regional](evidencias/part2/p2-00-cuota-vcpu-regional.png)
 ![Cuota DSv3](evidencias/part2/p2-00-cuota-dsv3.png)
@@ -398,10 +398,39 @@ la IP del balanceador.
 ![VMs creadas](evidencias/part2/p2-10-vms-creadas.png)
 ![App VM1](evidencias/part2/p2-11-app-vm1.png)
 ![App VM2](evidencias/part2/p2-11-app-vm2.png)
+
+VM3 no tiene salida a Internet: al no tener IP pública y estar en el backend pool de un balanceador
+Standard sin regla de salida, no puede descargar Node ni el repositorio. Se entró por SSH saltando desde
+VM1 (`ssh -J`) y `curl https://github.com` se quedó colgado:
+
+![VM3 sin Internet](evidencias/part2/p2-11b-vm3-sin-internet.png)
+
+Como solución se desasoció la IP pública `VM2-ip` de VM2 (que ya tenía la app corriendo con forever) y se
+asoció a VM3 para instalarla. El balanceador sigue llegando a las 3 VMs por su IP privada.
+
+![VM2-ip asociada a VM3](evidencias/part2/p2-11c-ip-a-vm3.png)
+
 ![App VM3](evidencias/part2/p2-11-app-vm3.png)
+![Forever VM3](evidencias/part2/p2-11d-forever-vm3.png)
+
+El backend pool tiene las 3 VMs (10.1.0.4, 10.1.0.5 y 10.1.0.6, zona 4) y el *health probe* las marca a las
+3 como saludables (100 %) desde que se instaló la app en cada una:
+
 ![Backend pool saludable](evidencias/part2/p2-12-backend-pool-saludable.png)
+![Health probe por VM](evidencias/part2/p2-12b-health-probe-metricas.png)
+
+El balanceador responde por la IP 20.10.208.227:
+
 ![LB raíz](evidencias/part2/p2-13-lb-hello.png)
 ![LB fibonacci/1](evidencias/part2/p2-14-lb-fibonacci1.png)
+
+CPU máxima de las 3 VMs en reposo, antes de las pruebas de carga (menos del 1 %; el pico de VM3 a las 11:19
+es la instalación de la app). Se graficó cada VM por separado porque el portal no permitió el ámbito
+de varias VMs a la vez:
+
+![CPU reposo VM1](evidencias/part2/p2-14b-cpu-reposo-vm1.png)
+![CPU reposo VM2](evidencias/part2/p2-14b-cpu-reposo-vm2.png)
+![CPU reposo VM3](evidencias/part2/p2-14b-cpu-reposo-vm3.png)
 
 ### Preguntas
 
@@ -465,6 +494,11 @@ Es importante cuando la aplicación guarda **estado en memoria** (sesiones, carr
 
 Una zona de disponibilidad es uno o más datacenters **físicamente separados** dentro de una misma región, con energía, refrigeración y red independientes. Al poner VM1, VM2 y VM3 en las zonas 1, 2 y 3, la falla de un datacenter completo solo tumba una VM y el balanceador sigue enviando tráfico a las otras dos (SLA de VMs del 99.99 %).
 
+> En este despliegue no se pudo repartir en 3 zonas: con Azure for Students solo la zona 4 de East US 2
+> tenía tamaños disponibles, así que las 3 VMs quedaron en la misma zona. Se conserva la tolerancia a la
+> caída de una VM (el *health probe* la saca del pool), pero **no** la tolerancia a la caída de un
+> datacenter completo; en producción se repartirían en zonas distintas.
+
 Una IP **zone-redundant** se sirve simultáneamente desde todas las zonas de la región, de modo que sigue funcionando aunque una zona falle (una IP *zonal* depende de una única zona).
 
 **¿Cuál es el propósito del *Network Security Group*?**
@@ -476,54 +510,147 @@ Es un firewall distribuido con reglas *stateful* de permitir/denegar según orig
 ![Newman LB 1](evidencias/part2/p2-15-newman-lb-2paralelo-1.png)
 ![Newman LB 2](evidencias/part2/p2-15-newman-lb-2paralelo-2.png)
 
-TODO: pegar la tabla de `node scripts/resumen-newman.js evidencias/part2/newman/lb-3vms`.
+Resumen (`node scripts/resumen-newman.js evidencias/part2/newman/lb-3vms`):
 
-| Métrica (2 newman en paralelo, 10 iteraciones c/u) | 1 VM B1ls | 1 VM B2ms | LB + 3 VMs B1ls |
+| Ejecución | Peticiones | Exitosas | Fallidas | Prom. (s) | Mín. (s) | Máx. (s) | Duración total (s) |
+|---|---|---|---|---|---|---|---|
+| newman-1 | 10 | 10 | 0 | 8.75 | 7.91 | 15.85 | 87.6 |
+| newman-2 | 10 | 9 | 1 | 8.85 | 7.91 | 15.97 | 87.4 |
+
+Promedio global de respuestas exitosas: **8.79 s**. Error: 1 `ECONNRESET` (iteración 2 de newman-2).
+Peticiones atendidas por cada VM (encabezado `X-Served-By`): **VM1: 11, VM3: 8**, VM2: 0.
+
+![Resumen newman LB](evidencias/part2/p2-15a-resumen-lb-2paralelo.png)
+
+CPU máxima durante la prueba: VM1 ≈ 44 %, VM3 ≈ 6 % (último punto, todavía parcial cuando se tomó el
+pantallazo) y VM2 sin carga (≈ 0.2 %), lo que coincide con el reparto anterior:
+
+![CPU VM1](evidencias/part2/p2-15b-cpu-lb-2paralelo-vm1.png)
+![CPU VM2](evidencias/part2/p2-15b-cpu-lb-2paralelo-vm2.png)
+![CPU VM3](evidencias/part2/p2-15b-cpu-lb-2paralelo-vm3.png)
+
+| Métrica (2 newman en paralelo, 10 iteraciones c/u) | 1 VM D2s_v3 (parte 1) | 1 VM D4s_v3 (parte 1) | LB + 3 VMs (2× D2s_v3 + 1× E2s_v3) |
 |---|---|---|---|
 | Peticiones totales | 20 | 20 | 20 |
-| Peticiones exitosas | TODO | TODO | TODO |
-| Tasa de éxito | TODO | TODO | TODO |
-| Tiempo promedio (s) | TODO | TODO | TODO |
-| Tiempo máximo (s) | TODO | TODO | TODO |
-| Duración total de la prueba (s) | TODO | TODO | TODO |
-| Costo aprox. mensual (US$) | TODO (~4) | TODO (~60) | TODO (3×~4 + LB ~18 + 4 IPs ~15) |
+| Peticiones exitosas | 11 | 11 | **19** |
+| Tasa de éxito | 55 % | 55 % | **95 %** |
+| Tiempo promedio de las exitosas (s) | 12.94 | 12.46 | **8.79** |
+| Tiempo máximo (s) | 21.73 | 20.84 | 15.97 |
+| Duración total de la prueba (s) | 119.9 | 115.5 | **87.6** |
+| Costo aprox. mensual (US$) | ≈ 70 | ≈ 140 | **≈ 266** |
 
-TODO: verificar los costos en la calculadora de Azure (región, Linux, pago por uso) y adjuntar `p2-19-costos.png`.
+**Costos (East US 2, Linux, pago por uso, 730 h/mes):**
 
-![Costos](evidencias/part2/p2-19-costos.png)
+| Recurso | Precio | Mensual (US$) | Fuente |
+|---|---|---|---|
+| VM1 + VM2 Standard_D2s_v3 | 0.096 US$/h c/u | 140.16 | Calculadora de Azure y portal |
+| VM3 Standard_E2s_v3 | 0.133 US$/h | ≈ 97.09 | Portal (pantalla "Revisar y crear") |
+| Load Balancer Standard (1 regla) | ≈ 0.025 US$/h + 0.005 US$/GB | ≈ 18.25 | Precio público de Azure (aprox.) |
+| 3 IPs públicas Standard | ≈ 0.005 US$/h c/u | ≈ 10.95 | Precio público de Azure (aprox.) |
+| **Total** | | **≈ 266** | |
 
-Análisis: TODO. Comparación esperada: con el balanceador cada newman queda atendido por una VM distinta, así que las peticiones ya no compiten por el mismo hilo/CPU; el tiempo de respuesta se acerca al de una petición aislada y la tasa de éxito aumenta. Además, la solución horizontal es tolerante a fallos (3 zonas) y crece agregando nodos baratos; su costo es comparable o menor que el de una sola B2ms.
+![Costo de 2 VMs D2s_v3 en la calculadora](evidencias/part2/p2-19a-costos-2xd2sv3.png)
+
+> En la calculadora solo se registró el bloque de las 2 VMs D2s_v3; los demás valores salen del portal
+> o del precio público y son aproximados (no incluyen discos ni tráfico de salida, que son pocos dólares).
+
+Con estos precios la arquitectura horizontal cuesta ≈ 1.9 veces la VM D4s_v3 (≈ 266 vs ≈ 140 US$), pero
+con la misma carga de 2 newman pasó de 55 % a 95 % de éxito, y con 4 newman de 52.5 % a 80 % con un
+tiempo promedio 3.3 veces menor. Además, cada nodo se puede agregar o quitar sin reiniciar el servicio.
+Buena parte de la diferencia viene de que VM3 tuvo que ser de la serie E (memoria optimizada, más cara);
+con 3 D2s_v3 el total bajaría a ≈ 240 US$, y con tamaños de 1 vCPU (los B1ls del enunciado) sería mucho
+más barato que una sola VM grande.
+
+Análisis: con una sola VM (de cualquier tamaño) las dos ejecuciones compiten por el **único hilo** de Node:
+mientras una petición calcula, la otra espera y su conexión *keep-alive* se cierra, por eso fallaba casi
+la mitad (ECONNRESET alternados) y duplicar la VM a D4s_v3 no cambió nada. Con el balanceador, cada
+ejecución de newman quedó en una VM distinta (VM1 y VM3), así que cada petición se calcula sin esperar
+a la otra: la tasa de éxito pasó de 55 % a **95 %**, la prueba terminó un 27 % más rápido y el tiempo
+promedio bajó a 8.79 s. El único fallo y el máximo de ~16 s ocurrieron al inicio, cuando las dos
+conexiones cayeron primero en la misma VM (VM1 atendió 11 peticiones, una más que una ejecución completa)
+antes de que una se fuera a VM3. VM2 no recibió tráfico porque con solo 2 conexiones y *hash* de 5-tupla
+alguna VM puede quedar libre; esa capacidad sobrante es la que se aprovecha en la prueba de 4 en paralelo.
+
+> El tiempo mínimo por petición (7.9 s) es menor que en la parte 1 (10.8 s) aunque el tamaño es el mismo
+> (D2s_v3); se atribuye a que las VMs de la zona 4 corren sobre hardware más nuevo, no al balanceador.
 
 > Nota: el LB usa *hash* de 5-tupla por conexión. Newman reutiliza la conexión TCP (*keep-alive*) durante una ejecución, por lo que normalmente todas las peticiones de una ejecución caen en la misma VM y cada ejecución paralela en una VM diferente. El script de resumen muestra cuántas peticiones atendió cada VM (encabezado `X-Served-By`).
 
-### Punto 3: 4 VMs y 4 ejecuciones paralelas
+### Punto 3: 4 ejecuciones paralelas (con 3 VMs)
 
-![VM4](evidencias/part2/p2-16-vm4.png)
-![Newman 4 paralelo](evidencias/part2/p2-17-newman-lb-4paralelo.png)
-![CPU 4 VMs](evidencias/part2/p2-18-cpu-4vms.png)
+> **VM4 no se creó.** Con Azure for Students el límite regional es de 6 vCPU y ya se usan 6
+> (VM1 y VM2 D2s_v3 = 4, VM3 E2s_v3 = 2); la familia DSv3 está en su tope de 4 y la solicitud de aumento
+> de cuota fue rechazada. Además la suscripción solo admite 3 IPs públicas. Por eso la prueba de
+> 4 ejecuciones en paralelo se hizo contra las **3 VMs** disponibles.
 
-TODO: pegar la tabla de `node scripts/resumen-newman.js evidencias/part2/newman/lb-4vms`.
+![Newman 4 paralelo 1](evidencias/part2/p2-17-newman-lb-4paralelo-1.png)
+![Newman 4 paralelo 2](evidencias/part2/p2-17-newman-lb-4paralelo-2.png)
+![Newman 4 paralelo 3](evidencias/part2/p2-17-newman-lb-4paralelo-3.png)
+![Newman 4 paralelo 4](evidencias/part2/p2-17-newman-lb-4paralelo-4.png)
 
-| VM | Zona | CPU máx. (%) | Peticiones atendidas |
-|---|---|---|---|
-| VM1 | 1 | TODO | TODO |
-| VM2 | 2 | TODO | TODO |
-| VM3 | 3 | TODO | TODO |
-| VM4 | TODO | TODO | TODO |
+Resumen (`node scripts/resumen-newman.js evidencias/part2/newman/lb-3vms-4`):
 
-¿Por qué aumentó la tasa de éxito? TODO: con sus datos. Explicación: la carga se **reparte** entre 4 nodos independientes; cada VM procesa aproximadamente una ejecución de newman a la vez, por lo que no se forman colas en un único hilo, la memoria de cada VM no se agota y la CPU de cada una vuelve a estar libre entre peticiones. La capacidad total crece de forma casi lineal con el número de nodos, cosa que no ocurre al agrandar una sola VM.
+| Ejecución | Peticiones | Exitosas | Fallidas | Prom. (s) | Mín. (s) | Máx. (s) | Duración total (s) |
+|---|---|---|---|---|---|---|---|
+| newman-1 | 10 | 7 | 3 | 9.30 | 7.98 | 15.76 | 87.9 |
+| newman-2 | 10 | 8 | 2 | 9.00 | 7.93 | 15.72 | 87.0 |
+| newman-3 | 10 | 10 | 0 | 7.97 | 7.91 | 8.14 | 79.9 |
+| newman-4 | 10 | 7 | 3 | 9.11 | 7.95 | 15.69 | 86.7 |
+
+Promedio global de respuestas exitosas: **8.77 s**. Errores: 8 `ECONNRESET` (newman-1, 2 y 4).
+
+![Resumen newman 4 paralelo](evidencias/part2/p2-17a-resumen-lb-4paralelo.png)
+
+![CPU VM1](evidencias/part2/p2-18-cpu-4paralelo-vm1.png)
+![CPU VM2](evidencias/part2/p2-18-cpu-4paralelo-vm2.png)
+![CPU VM3](evidencias/part2/p2-18-cpu-4paralelo-vm3.png)
+
+| VM | Tamaño | Zona | CPU máx. (%) | Peticiones exitosas atendidas |
+|---|---|---|---|---|
+| VM1 | D2s_v3 | 4 | ≈ 49 | 11 |
+| VM2 | D2s_v3 | 4 | ≈ 49 | 10 |
+| VM3 | E2s_v3 | 4 | ≈ 49 | 11 |
+
+(En las gráficas, el primer pico de VM1 y VM3 hacia las 11:51 es la prueba de 2 en paralelo y el segundo,
+hacia las 11:57, es esta prueba; VM2 solo trabajó en esta.)
+
+Comparación con la mejor VM de la parte 1 (D4s_v3) bajo la misma carga de 4 ejecuciones en paralelo:
+
+| Métrica (4 newman × 10 iteraciones) | 1 VM D4s_v3 (parte 1) | LB + 3 VMs |
+|---|---|---|
+| Peticiones exitosas | 21/40 (52.5 %) | **32/40 (80 %)** |
+| Tiempo promedio de las exitosas (s) | 29.10 | **8.77** |
+| Duración de la prueba (s) | ≈ 206 | **≈ 88** |
+| Throughput aprox. | ≈ 6 peticiones/min | ≈ 22 peticiones/min |
+
+**¿Por qué aumentó la tasa de éxito?** Porque la carga se **reparte**: las 3 VMs trabajaron al mismo
+tiempo (cada una con ~49 % de CPU, es decir un núcleo completo de sus 2 vCPU, que es lo máximo que usa
+el único hilo de Node) y atendieron casi la misma cantidad de peticiones (11/10/11). Con una sola VM las 4
+ejecuciones hacían cola sobre el mismo hilo: cada petición esperaba a las demás (29 s en promedio) y la
+mitad de las conexiones se caían. Con el balanceador el tiempo por petición volvió al de una petición
+aislada (~8 s) y la prueba terminó en menos de la mitad del tiempo.
+
+No llegó al 100 % porque hay **4 ejecuciones y solo 3 VMs**: siempre hay una VM atendiendo dos
+conexiones a la vez, y ahí se repite el problema de la parte 1 (una espera a la otra y su conexión
+*keep-alive* se cierra → `ECONNRESET`). newman-3 tuvo su VM para ella sola durante toda la prueba y no falló
+ninguna petición (máximo 8.14 s); las otras tres compartieron VM en algunos momentos (máximos de ~15.7 s =
+dos cálculos seguidos). Con una VM por ejecución (la VM4 del enunciado) se esperaría ~100 %. Esto muestra
+que la capacidad crece casi linealmente al **agregar nodos**, algo que no se logró al agrandar una sola VM.
 
 ### Diagrama de despliegue
+
+Despliegue real (East US 2). Todas las VMs quedaron en la zona 4 por la falta de capacidad en las
+zonas 1–3 para esta suscripción, y no hay VM4 por los límites de cuota.
 
 ```mermaid
 flowchart LR
     C["Cliente<br/>(navegador / newman)"] -->|"HTTP :80"| PIP
 
-    subgraph AZ["Azure – Resource group SCALABILITY_LAB (región)"]
-        PIP["SCALABILITY_LAB_LOAD_BALANCER_IP<br/>IP pública Standard, zone-redundant"]
+    subgraph AZ["Azure – Resource group SCALABILITY_LAB (East US 2)"]
+        PIP["IP pública del balanceador<br/>20.10.208.227 (Standard)"]
         subgraph LB["SCALABILITY_LAB_LOAD_BALANCER (Standard, público)"]
-            R["Load balancing rule<br/>TCP 80 → 3000"]
-            HP["Health probe<br/>TCP 3000 c/5 s"]
+            R["Load balancing rule<br/>TCP 80 → 3000, sin persistencia"]
+            HP["Health probe<br/>TCP 3000"]
             BP["Backend pool<br/>SCALABILITY_LAB_BACKEND_POOL"]
         end
         PIP --> R --> BP
@@ -531,25 +658,38 @@ flowchart LR
 
         subgraph VNET["SCALABILITY_LAB_VIRTUAL_NETWORK 10.1.0.0/16"]
             subgraph SUB["SCALABILITY_LAB_SUBNET 10.1.0.0/24 · NSG LOAD_BALANCER_NSG (22, 3000)"]
-                subgraph Z1["Zona 1"]
-                    VM1["VM1 · Ubuntu B1ls<br/>Node.js + forever<br/>FibonacciApp :3000"]
+                subgraph Z4["Zona de disponibilidad 4"]
+                    VM1["VM1 · D2s_v3 · 10.1.0.4<br/>Node.js + forever<br/>FibonacciApp :3000"]
+                    VM2["VM2 · D2s_v3 · 10.1.0.5<br/>Node.js + forever<br/>FibonacciApp :3000"]
+                    VM3["VM3 · E2s_v3 · 10.1.0.6<br/>Node.js + forever<br/>FibonacciApp :3000"]
                 end
-                subgraph Z2["Zona 2"]
-                    VM2["VM2 · Ubuntu B1ls<br/>Node.js + forever<br/>FibonacciApp :3000"]
-                end
-                subgraph Z3["Zona 3"]
-                    VM3["VM3 · Ubuntu B1ls<br/>Node.js + forever<br/>FibonacciApp :3000"]
-                end
-                VM4["VM4 · Ubuntu B1ls<br/>FibonacciApp :3000"]
             end
         end
-        BP --> VM1 & VM2 & VM3 & VM4
+        BP --> VM1 & VM2 & VM3
     end
+    A["Administrador (SSH :22)"] -.->|"VM1-ip 57.162.24.13"| VM1
+    A -.->|"VM2-ip 57.162.16.69<br/>(reasignada de VM2 a VM3)"| VM3
 ```
 
 ### Conclusiones
 
-TODO: 3–5 conclusiones propias, por ejemplo:
-- El escalamiento vertical tiene un techo, requiere reinicio (downtime) y no aprovecha más núcleos en una app Node de un solo hilo.
-- El escalamiento horizontal con balanceador reparte la carga, aumenta la tasa de éxito y da alta disponibilidad entre zonas.
-- La causa raíz del consumo de CPU es el algoritmo; optimizarlo (memoización, *fast doubling*) mejoraría ambas arquitecturas.
+- **El escalamiento vertical no resolvió el problema.** Pasar de D2s_v3 a D4s_v3 duplicó el costo y la
+  CPU disponible, pero la tasa de éxito siguió en 55 % y el tiempo por petición casi no cambió (12.01 →
+  11.62 s). FibonacciApp corre en un solo hilo de Node, así que los núcleos extra quedan sin usar (la CPU
+  bajó de ~48 % a ~23 %, es decir, sigue usando un núcleo). Además, el cambio de tamaño reinicia la VM y la
+  app se cae hasta volver a levantarla.
+- **El escalamiento horizontal sí aumentó la capacidad.** Con el balanceador y 3 VMs las peticiones se
+  atienden en paralelo en nodos distintos: 95 % de éxito con 2 newman y 80 % con 4 (vs. 52.5 % con la VM
+  grande), con un tiempo promedio de ~8.8 s en lugar de 29 s. Las 3 VMs repartieron la carga casi por igual
+  (11/10/11 peticiones).
+- **La capacidad crece con el número de nodos, no con su tamaño.** Con 4 ejecuciones y 3 VMs siempre hay
+  una VM con dos peticiones a la vez y ahí reaparecen los ECONNRESET; la ejecución que tuvo una VM sola
+  no tuvo ningún error. Para atender N clientes concurrentes con esta app se necesitan del orden de N
+  instancias (o varios procesos por VM, por ejemplo con *cluster* de Node o PM2).
+- **La alta disponibilidad depende de cómo se despliegue.** El *health probe* saca del pool a una VM caída,
+  pero aquí las 3 VMs quedaron en la misma zona (4) por las restricciones de la suscripción, así que no
+  se tolera la caída de un datacenter completo. Las cuotas de Azure for Students (6 vCPU, 3 IPs
+  públicas) también obligaron a dejar VM3 sin IP y sin la VM4 del enunciado.
+- **La causa raíz es el algoritmo.** Calcular Fibonacci(1 000 000) con BigInt tarda ~8–12 s y bloquea el
+  hilo; optimizarlo (memoización o *fast doubling*) o mover el cálculo a *worker threads* mejoraría
+  cualquiera de las dos arquitecturas más que cambiar de máquina.
