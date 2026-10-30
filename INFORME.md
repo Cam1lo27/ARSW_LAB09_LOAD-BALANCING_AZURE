@@ -1,10 +1,9 @@
 # Informe – Laboratorio 9: Escalamiento en Azure (vertical y horizontal)
 
-**Escuela Colombiana de Ingeniería – Arquitecturas de Software (ARSW)**
-**Autor:** Andrés Vivas
+**Escuela Colombiana de Ingeniería – Arquitecturas de Software (ARSW)**  
+**Autores:** Andrés Vivas y Nicolas Duarte
 
-> Las imágenes de este informe se leen de la carpeta `evidencias/`. Guarde cada pantallazo con el
-> nombre exacto que aparece en el enlace para que se vea automáticamente en GitHub.
+**🎥 [Video de explicación (la aplicación funcionando en Azure)](https://pruebacorreoescuelaingeduco-my.sharepoint.com/:v:/g/personal/andres_vivas-b_mail_escuelaing_edu_co/IQABrRT4LrAJSpjJrO1_7awhAWI-UcWTn8pUjItVsYFwxZc?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=mZIzRR)**
 
 ---
 
