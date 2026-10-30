@@ -326,15 +326,75 @@ La VM se devolvió a **Standard_D2s_v3** para reducir el costo:
 
 ### Infraestructura
 
-![VNet](evidencias/part2/p2-01-vnet.png)
+> **Nota sobre tamaños y cantidad de VMs:** la suscripción *Azure for Students* tiene un límite de
+> **6 vCPU regionales** en East US 2 (no ajustable: la solicitud para subirlo a 8 fue rechazada) y la
+> familia DSv3 solo permite 4 vCPU. Los tamaños de 1 vCPU no están disponibles, así que las VMs de esta
+> parte son **Standard_B2ats_v2** (2 vCPU, 1 GiB, familia Basv2) y solo caben **3 VMs** (6 vCPU).
+> Por eso el punto 3 (agregar una 4.ª VM) no se pudo hacer; la prueba con 4 newman en paralelo se
+> ejecutó contra las 3 VMs.
+
+![Cuota regional](evidencias/part2/p2-00-cuota-vcpu-regional.png)
+![Cuota DSv3](evidencias/part2/p2-00-cuota-dsv3.png)
+![Cuota Basv2](evidencias/part2/p2-00-cuota-basv2.png)
+![Solicitud de cuota rechazada](evidencias/part2/p2-00-solicitud-cuota-rechazada.png)
+
+Red virtual `SCALABILITY_LAB_VIRTUAL_NETWORK` (10.1.0.0/16) con la subred `SCALABILITY_LAB_SUBNET` (10.1.0.0/24):
+
+![VNet direcciones](evidencias/part2/p2-01a-vnet-direcciones.png)
+![VNet revisar y crear](evidencias/part2/p2-01b-vnet-revisar.png)
+![VNet subred](evidencias/part2/p2-01c-vnet-subred.png)
+Balanceador `SCALABILITY_LAB_LOAD_BALANCER` (Standard, público, regional) con IP pública **20.10.208.227**:
+
+![LB datos básicos](evidencias/part2/p2-02a-lb-basicos.png)
+![LB front-end en la creación](evidencias/part2/p2-02c-lb-frontend-creacion.png)
+![LB regla en la creación](evidencias/part2/p2-02d-lb-regla-panel.png)
+![LB reglas de entrada](evidencias/part2/p2-02b-lb-regla-creacion.png)
+![LB revisar y crear](evidencias/part2/p2-02e-lb-revisar.png)
+![LB implementado](evidencias/part2/p2-02f-lb-implementado.png)
 ![Load balancer](evidencias/part2/p2-02-lb.png)
+![LB front-end](evidencias/part2/p2-02g-lb-frontend.png)
 ![Backend pool](evidencias/part2/p2-03-backend-pool.png)
 ![Health probe](evidencias/part2/p2-04-health-probe.png)
 ![Load balancing rule](evidencias/part2/p2-05-lb-rule.png)
+> **Nota sobre las zonas:** para esta suscripción East US 2 no admite ningún tamaño en las zonas 1, 2 y 3
+> (ver `p2-00-tamanos-zona1.png`); el único lugar donde se pudo crear VMs fue la **zona 4**, así que las
+> tres VMs quedaron en la misma zona. El balanceo funciona igual, pero se pierde la tolerancia a la caída
+> de una zona completa que buscaba el enunciado.
+
+![Tamaños no admitidos en zona 1](evidencias/part2/p2-00-tamanos-zona1.png)
+![Tamaños disponibles en zona 4](evidencias/part2/p2-00-tamanos-zona4.png)
+
+VM1 (zona 4, Standard_D2s_v3), con el NSG `LOAD_BALANCER_NSG` (puertos 22 y 3000) y asociada al backend pool:
+
 ![VM1 básico](evidencias/part2/p2-06-vm1-basics.png)
+![VM1 revisar y crear](evidencias/part2/p2-06b-vm1-revisar.png)
 ![VM1 networking](evidencias/part2/p2-07-vm1-networking.png)
 ![NSG](evidencias/part2/p2-08-nsg.png)
 ![VM en balanceador](evidencias/part2/p2-09-vm-lb.png)
+
+VM2 se creó igual que VM1 (zona 4, Standard_D2s_v3), reutilizando el NSG existente `LOAD_BALANCER_NSG`:
+
+![VM2 redes](evidencias/part2/p2-06c-vm2-redes.png)
+![VM2 revisar y crear](evidencias/part2/p2-06d-vm2-revisar.png)
+
+Para VM3 no quedaba cupo en la familia DSv3 (4 vCPU ya usadas por VM1 y VM2), así que se usó la familia
+**ESv3** (`Standard_E2s_v3`, 2 vCPU), que tiene su propia cuota de 4 vCPU en East US 2:
+
+![Cuota ESv3](evidencias/part2/p2-00-cuota-esv3.png)
+
+> **Límite de IPs públicas.** Al validar VM3 apareció el error `ResourceCountExceedsLimitDueToTemplate`:
+> Azure for Students permite máximo **3 direcciones IP públicas** por suscripción, y ya existían 3
+> (la del balanceador, `VM1-ip` y `VM2-ip`). Por eso VM3 se creó **sin IP pública**. No afecta el
+> funcionamiento: el balanceador llega a las VMs por su IP privada dentro de la VNet; la IP pública de
+> cada VM solo se necesita para entrar por SSH a instalar la app.
+
+![Error cuota IP pública](evidencias/part2/p2-00-cuota-ip-publica-error.png)
+![VM3 redes sin IP pública](evidencias/part2/p2-06e-vm3-redes.png)
+
+Las 3 VMs quedaron en ejecución en East US 2, zona 4: VM1 (D2s_v3, 57.162.24.13), VM2 (D2s_v3, 57.162.16.69)
+y VM3 (E2s_v3). Para VM3 el portal muestra 20.10.208.227 porque, al no tener IP propia, sale a Internet por
+la IP del balanceador.
+
 ![VMs creadas](evidencias/part2/p2-10-vms-creadas.png)
 ![App VM1](evidencias/part2/p2-11-app-vm1.png)
 ![App VM2](evidencias/part2/p2-11-app-vm2.png)
